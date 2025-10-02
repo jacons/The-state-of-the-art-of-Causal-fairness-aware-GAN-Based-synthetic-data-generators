@@ -1,0 +1,469 @@
+\documentclass{article}
+
+\usepackage[left=3.4cm,right=3.4cm]{geometry}
+\usepackage{graphicx} 
+\usepackage{comment}
+\usepackage{biblatex}
+\usepackage{hyperref}
+\usepackage{amsmath}           
+\usepackage{amssymb} 
+\usepackage{amsthm}
+\usepackage{bm}
+\usepackage{xcolor}
+\usepackage{todonotes}
+\usepackage{dsfont}
+
+\newcommand{\indep}{\perp \!\!\! \perp}
+\newcommand{\nindep}{\not\perp\!\!\!\perp}
+\newcommand{\xbold}{\bm{x}}
+
+\newtheorem{definition}{Definition}
+\newtheorem{corollary}{Corollary}
+
+\addbibresource{b.bib} 
+
+\title{%
+  The state-of-the-art of \\Causal fairness-aware GAN-Based synthetic data generators
+  \\\vspace{0.2cm}
+  \large Report for ``\textit{Statistics for Machine Learning}'' Ph.D A.y. Course 24/25
+}
+    
+%\title{}
+
+\author{Andrea Iommi}
+\date{September 2025}
+
+\begin{document}
+
+\maketitle
+
+
+\section{Introduction}
+\label{sec:intro}
+This report aims to describe and discuss some state-of-the-art methodologies in synthetic data generation.
+The works presented are GAN--based causal fairness-aware approaches for generating tabular synthetic datasets. 
+The works chosen~\cite{DBLP:Xu_Depeng,DBLP:CFGAN,DBLP:DECAF,counterfactual} are presented in chronological order.
+Starting from FairGAN~\cite{DBLP:Xu_Depeng} (2018), which was one of the first approaches to tackle discrimination in the generative methods, we explore more sophisticated and causal-grounded architectures such as CFGAN~\cite{DBLP:CFGAN} (2019) and DECAF~\cite{DBLP:DECAF} (2021) to arrive at the more recent paper explored, CFSDG~\cite{counterfactual} (2022).
+Each paper presented outlines the limitations of the previous works. 
+
+
+\paragraph{Motivation.} Synthetic data generation (SDG) denotes an essential tool for Machine Learning (ML), particularly in high-risk fields such as healthcare~\cite{DBLP:MurtazaAKMZB23}, business~\cite{DBLP:Assefa_Samuel}, or recruitment~\cite{DBLP:Beretta_Andrea}.
+In many of these applications, privacy concerns and regulations make it impossible to release real datasets, creating a bottleneck for training ML architectures. 
+Synthetic data (SD) offers a promising solution by creating a dataset that resembles the real data while protecting the privacy of individuals.
+Another essential challenge is related to the fairness of the data. 
+Historical datasets often contain inherent biases, and ML models trained on such data can reflect and even exacerbate existing discrimination. 
+A subfield of the SDG work on removing these discriminatory biases before the data is used. 
+In other words, the goal is to produce datasets that are similar to the original data, but discrimination-free, so that any downstream model trained on them will also be fair.
+
+The report is organised as follows: in Section~\ref{sec:background}, we provide a brief outline of the key concepts utilised by papers, in Section~\ref{sec:contrib}, we describe the contributions by providing an intuition behind the methods, in Section~\ref{sec:discussion} we argue about the strength and weakness of the algorithms, and finally in Section~\ref{sec:conclusion} we wrap up the analysed papers providing some idea about future works.  
+
+\section{Background}
+\label{sec:background}
+
+\subsection{Structural Causal Models}
+\label{sec:scm}
+A Structural Causal Model (SCM)~\cite{DBLP:PearlCausality2009,Peters_Jonas,DBLP:journals/widm/NogueiraPRPG22} describes a data-generating process by relating random variables in cause-effect pairs. 
+Let $\bm{X} = \{ X_1, \ldots, X_d\}$ be $d$ observable random variables, defined by a set $\mathbf{F}$ of structural equations: 
+%
+\begin{equation}
+    \label{eq:scm}
+    X_i := f_i(\mathbf{PA}_i, U_i) \quad \quad \mbox{for}\ i = 1,\dots, d
+\end{equation}
+%
+where $\mathbf{U} = \{ U_1, \ldots, U_d\}$ are $d$ independent exogenous (unobserved) random variables, and $\mathbf{PA}_i \subseteq \bm{X} \setminus \{X_i\}$ are the causal parents of $X_i$. The equations describe the causal mechanism by which an $X_i$ is generated from its causal parents and an exogenous variable $U_i$. 
+Formally, a SCM $\mathcal{M}$ is a tuple $\mathcal{M} = \langle \mathbf{U}, P(\mathbf{U}), \bm{X}, \mathbf{F} \rangle$, where $P(\mathbf{U}) = \prod_i P(U_i)$ is the probability distribution of the exogenous variables. 
+%
+The parental relations in a SCM induce a \textit{causal graph} $\mathcal{G}$, in which the nodes represent random variables and a directed edge $X_j \to X_i$ denotes a causal relation between $X_j \in \mathbf{PA}_i$ and $X_i$.
+We assume Directed Acyclic Graphs (DAGs), meaning there are no loops in $\mathcal{G}$. 
+Then the data generation process can proceed by following a topological order of the variables given the graph. 
+Under the Markov property assumption, the induced probability on $\bm{X}$ can then be factorized as $P(\bm{X}) =  \prod_i P(X_i|\mathbf{PA}_i, U_i)$.
+%
+\paragraph{Atomic interventions.} 
+SCMs allow us to reason about the effect of external manipulations on the system. 
+An \emph{atomic intervention} consists of setting a variable $X_j$ to a value $x$ regardless of its natural causes, denoted by the \emph{do-operator} $\mathrm{do}(X_j = x)$~\cite{DBLP:PearlCausality2009}. 
+Formally, this is modelled by replacing the structural equation for $X_j$ with the constant assignment $X_j := x$, while leaving all other equations unchanged.
+The resulting modified model generates a new distribution that captures the causal effect of the intervention. 
+In formula:
+
+\begin{equation}
+    P_{\bm{X}}^{\hat{\mathcal{M}}} =: P_{\bm{X}}^{\mathcal{M} ; \mathrm{do}(X_j = x)}
+    \label{eq:intervention}
+\end{equation}
+
+\paragraph{Counterfactual.}
+Beyond interventions, SCMs enable reasoning about \emph{counterfactuals}, i.e., statements of the form: ``What would $Y$ have been if $\bm{X}$ had taken value $x$, given that we observed evidence $\bm{X} = \bm{x}$?''.
+Counterfactual queries require three steps: (i) \emph{abduction}, where we update the distribution of exogenous variables $\mathbf{U}$ given the observed evidence; (ii) \emph{action}, where we modify the model by applying the intervention $\mathrm{do}(\bm{X} = \bm{x})$; and (iii) \emph{prediction}, where we compute the value (or distribution) of $Y$ in the modified model using the inferred $\mathbf{U}$.
+In formula~\footnote{I have slightly change the notation presented in~\cite{DBLP:PearlCausality2009}, however it is should be ok}:
+\begin{equation}
+    \mathcal{M}_{\bm{X}=\bm{x}} := \langle \mathbf{U}, P(\mathbf{U})^{\mathcal{M}|\bm{X}=\bm{x}}, \bm{X}, \mathbf{F} \rangle
+    \label{eq:counterfactual}
+\end{equation}
+where $P(\mathbf{U})^{\mathcal{M}|\bm{X}=\bm{x}} := P(U|\bm{X}=\bm{x})$
+The new set of noise variables is no longer jointly independent.
+
+
+\subsection{Notations and Definitions} 
+\label{sec:sdg_def} 
+Let $\mathcal{D} = \{\mathcal{X},\mathcal{Y},\mathcal{A}\} \sim P_{data}$ (simply $P$) be a dataset where $\mathcal{X}$ is the unprotected features, $\mathcal{Y}$ is the target, and $\mathcal{A}$ is the protected feature drawn from a data distribution $P$. 
+Denote $\mathcal{Q}$ as a concatenation of the unprotected features $\mathcal{X}$ and the protected feature $\mathcal{A}$, i.e., $ \mathcal{Q} = \mathcal{X} \cup \mathcal{A}$.
+The ``Fairness'' generative models aim to approximate the distribution $P$ with $P'$ such that a synthetic dataset $\mathcal{D}' \sim P'$ is as close as possible to $\mathcal{D}$ and discrimination-free. 
+This property ensures that ML models trained on that data are fair~\cite{DBLP:DECAF, DBLP:Xu_Depeng}. 
+For the remainder of the paper, we use the following notation: we refer to the training set and data distribution as $\mathcal{D}$ and $P$, respectively.
+Instead, we denote the distribution approximated by the model and the synthetic dataset as $P'$ and $\mathcal{D'}$.
+
+\label{sec:fairness_notions}
+Finally, we refer to $\bm{X}$ as a random variable that encompasses the unprotected features, $A$ the protected attribute, $Y$ the target (often referred to as ``decision'') and $\hat{Y} = f: \mathcal{Q} \to \mathcal{Y}$ as a downstream task predictor.
+
+\begin{definition}[Fairness Through Unawareness (FTU)]
+    A predictor $\hat{Y}$ is fair iff protected attributes $A$ are not explicitly used in the prediction.
+    \label{def:ftu}
+\end{definition}
+In other words, when $A \notin \bm{Q} \implies \bm{Q} = \bm{X}$ only.
+
+\begin{definition}[Statistical parity (SP) or Demographic parity(DP)]
+    A predictor $\hat{Y}$ satisfies the DP if $P(\hat{Y} |A=a)=P(\hat{Y}|A=a')$, i.e., $A \indep \hat{Y} \quad\forall a,a' \in \mathcal{A}$.
+    \label{def:dp}
+\end{definition}
+%
+Definition~\ref{def:dp} is a group-level fairness notion. 
+It requires that the probability of receiving a positive (or negative) outcome is the same across all protected groups. 
+%
+\begin{definition}[Conditional Fairness (CF)]
+    A predictor $\hat{Y}$ is conditional fair iff $A \indep \hat{Y}|\bm{R}$ where $\bm{R} \subset \bm{X}$, i.e. $\forall r,a,a': P(\hat{Y}|\bm{R=r},A=a) = P(\hat{Y}|\bm{R=r},A=a')$
+    \label{def:cf}
+\end{definition}
+The Definition~\ref{def:cf} is a generalisation of FTU~\ref{def:ftu} and DP~\ref{def:dp}, by setting $\bm{R} = \bm{X}$ and $\bm{R} = \emptyset$, respectively.
+%
+\begin{definition}[Counterfactual Fairness (COF)]
+     A predictor $\hat{Y}$ satisfies counterfactual fairness if for any context $A = a$ and $\bm{X} = \bm{x}$, $P(\hat{Y}_{A \leftarrow a} = y|\bm{X} = \bm{x}, A = a) = P (\hat{Y}_{A \leftarrow a'} = y|\bm{X} = \bm{x}, A = a)$ holds for all value of $y$ and $a' \in \mathcal{A}$.
+     \label{def:cof}
+\end{definition}
+%
+Definition~\ref{def:cof} is an individual-level fairness notion.
+It requires that for any given individual, the outcome would have been the same even if their protected attribute had been different, assuming all other background factors remained constant. 
+
+
+
+\subsection{Generative Adversarial Networks}
+\label{sec:gan}
+Generative Adversarial Networks (GANs)~\cite{DBLP:GoodfellowPMXWOCB14} are generative models designed to learn a data distribution and produce new samples that resemble those drawn from the true distribution.
+A GAN consists of two neural networks that are trained simultaneously: the \emph{generator} and the \emph{discriminator}.
+To simplify the notation, ignore the distinction between protected, unprotected attributes and target for the rest of this section, i.e., assume that $\mathcal{X} = \mathcal{X} \cup \mathcal{A} \cup \mathcal{Y}$.
+The generator $G : \mathcal{Z} \to \mathcal{X}$ maps a random noise vector $\bm{z} \sim P(\bm{Z})$ into the data space $\mathcal{X}$. 
+Its goal is to produce synthetic samples $\bm{x}' \sim G(\bm{z})$ that are indistinguishable from real data.
+The discriminator $D: \mathcal{X} \to [0,1]$ is a binary classifier that receives as input either a real data sample $\bm{x} \sim P(\bm{X})$ or a synthetic sample $\bm{x}' \sim G(\bm{z})$.
+It outputs a probability indicating how likely the input is to belong to the true data distribution rather than being generated.
+Training proceeds as a two-player minimax game. 
+The discriminator aims to maximise the probability of correctly distinguishing real from fake samples, while the generator aims to minimise the discriminator's ability to detect fakes. 
+Formally, the objective function is:
+
+\begin{equation}
+    \min_{G} \max_{D} V(D, G) = \mathbb{E}_{\bm{x} \sim P(\bm{X})} \big[ \log D(\bm{x}) \big] + \mathbb{E}_{\bm{z} \sim P(\bm{Z})} \big[ \log \big(1 - D(G(\bm{z})) \big) \big]
+    \label{eq:gan_loss}
+\end{equation}
+\paragraph{CausalGAN}
+\label{sec:causal_gan}
+\cite{DBLP:DECAF,DBLP:CFGAN, counterfactual} present a variation of vanilla GAN (Section~\ref{sec:gan}) in which the generation process is distinct for each feature and follows a topological order provided by a causal graph $\mathcal{G}$.
+Let us rethink $\mathcal{D}$ (defined in Section~\ref{sec:sdg_def}) as a set of $n$ observation $\mathcal{D} =\{\bm{x}_1,\dots,\bm{x}_n\}$, where $\bm{x} \in \mathbb{R}^d$, $d$ is the number of features and $n$ the observations.
+
+A CausalGAN is constituted by $d$ structural equation $f_i$ (Equation~\ref{eq:scm}) modelled by a separate conditional GAN $G_i: \mathbb{R}^{|Pa(X_i)+1|} \to \mathbb{R}$.
+The generator takes as input the parents of $X_i$ and a random noise $\bm{z}$. 
+The features are generated sequentially following the topological ordering of the underlying causal DAG. 
+Subsequently, the synthetic sample $\bm{x}'$ is passed to a discriminator $D$, which is trained to distinguish the generated samples from original samples as in Equation~\ref{eq:gan_loss}.
+In other words, in the vanilla GAN, the generator is a single neural network; on the other hand, in a CausalGAN, the generator is a set of CGANs, one for each feature, which are connected by the causal relationship imposed by the graph $\mathcal{G}$.
+
+
+\section{Contributions}
+\label{sec:contrib}
+
+\subsection{FairGAN}
+\label{sec:fairgan}
+Fairness-aware Generative Adversarial Network (FairGAN)~\cite{DBLP:Xu_Depeng} is one of the first papers that exploits a GAN--based approach to tackle the discrimination in tabular SDG. 
+The intuition behind the model is to extend the vanilla GAN architecture (Section~\ref{sec:gan}) by imposing an additional fairness constraint. 
+The constraint motivates the model to make both the unprotected features and the target independent of the protected attribute. 
+
+Let us assume a dataset $\mathcal{D}$ (as defined in Section~\ref{sec:sdg_def}) where both target $\mathcal{Y}$ and the protected feature $\mathcal{A}$ are binary.
+The architecture consists of one generator, $G$, and two discriminators, $D^1$ and $D^2$. 
+The generator generates fake samples $\mathcal{D}' = \{(\bm{x}', y')\}$ conditioned on the protected attribute $a \sim P(A)$, $D^1$ aims to ensure that generated data $\{(\bm{x}', a, y')\}$ is close to the real data $\{(\bm{x}, a , y)\}$ as possible, while the other discriminator $D^2$ aims to ensure there are no correlation between $\bm{X}'$ and $S$ and no correlation between $Y'$ and $S$.
+$a$ is a sample from the marginal distribution of the dataset $\mathcal{D}$.
+
+In other words, FairGAN generates the unprotected attributes $\bm{x}'$ and decision $y'$ given the protected attribute $a$, and achieves $\bm{X}' \indep S$ and $Y' \indep S$. Therefore, the generated data can meet the requirements in terms of Demographic parity (Section~\ref{def:dp}) and FTU (Section~\ref{def:ftu}).
+FairGAN tries to optimise: 
+
+\begin{equation}
+    \min_{G} \max_{D^1, D^2} J(G, D^1, D^2) = J_1(G, D^1) + \lambda J_2(G, D^2)
+    \label{eq:overall_loss}
+\end{equation}
+
+where:
+
+\begin{equation}
+    \begin{split}
+        J_1(G, D^1) &= \mathbb{E}_{a \sim P(A),(\bm{X}, Y) \sim P(\bm{X},Y|A)}[\log D^1(\bm{x}, y, a)]\\&+ \mathbb{E}_{a \sim P(A),(\bm{x}', y') \sim P_{G}(\bm{X}', Y' |A)}[1 - \log D^1(\bm{x}', y', a)]
+        \\
+        J_2(G, D^2) &= \mathbb{E}_{(\bm{x}', y') \sim P_{G}(\bm{X}', Y' |A=1)}[\log D^2(\bm{x}', y')] \\&+ \mathbb{E}_{(\bm{x}', y') \sim P_{G}(\bm{X}', Y' |A=0)}[1 - \log D^2((\bm{x}', y'))]
+    \end{split}
+    \label{eq:fairgan_loss}
+\end{equation}
+The parameter $\lambda$ balances the satisfaction of the fairness notion.
+Figure~\ref{fig:fairgan} shows the model's architecture. 
+In particular, the discriminator $D^2$ tries to distinguish the data distribution derived from the different protected value conditions. 
+The generator should achieve the situation in which $P_G(\bm{X}',Y'|A=0) \approx P_G(\bm{X}', Y' | A=1)$.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.4\linewidth]{img/fairgan.png}
+    \caption{The Structure of FairGAN}
+    \label{fig:fairgan}
+\end{figure}
+
+\subsection{Causal fairness-aware GAN}
+\label{sec:CFGAN}
+Causal fairness-aware GAN (CFGAN)~\cite{DBLP:CFGAN} represents GAN--based SDG, which ensures fairness in the synthetic dataset by using the fairness notion (see Section~\ref{sec:fairness_notions}) in the loss function, similarly to FairGAN (Section~\ref{sec:fairgan}), but also exploits causal reasoning (Section~\ref{sec:scm}). 
+The architecture assumes a dataset $\mathcal{D}$ and a causal graph $\mathcal{G}$ that faithfully respects the dataset.
+CFGAN relies on the CausalGAN (Section~\ref{sec:causal_gan}) but extends the architecture by including an additional generator and discriminator.
+Hence, the model consists of two generators, $G^1$ and $G^2$, and two discriminators, $D^1$ and $D^2$. 
+One discriminator is used to optimise the data utility, and another to enforce the fairness constraint.
+We specify that each generator $G$ is composed of a set of sub-generators $G^i = \{G_0^i,\dots, G_d^i\}$.
+The key concept behind the proposed model is to minimise the ``change in distribution'' caused by an intervention or counterfactual in the causal structure. 
+Intuitively, if an intervention on the protected attribute does not change the data distribution, we achieve fairness in the data generation process. 
+To introduce the algorithm, we need to describe some useful notions of fairness: total effect, path-specific effect, and counterfactual effect.
+
+The \textit{total effect} measures the causal effect of $\bm{X}$ on $Y$ where the intervention is transferred along all causal paths (i.e., directed paths) from $\bm{X}$ to $Y$.
+For the rest of this paper, we refer $P(Y | \mathrm{do}(\bm{X = x}))$ as $P(Y_{\bm{x}})$.
+\begin{definition}[Total effect]
+    \label{def:te}
+    The total effect of the value change of $\bm{X}$ from $\bm{x}_1$ to $\bm{x}_2$ on $Y$ is given by $TE(\bm{x}_2, \bm{x}_1) = P (Y_{\bm{x}_2} ) - P (Y_{\bm{x}_1})$. When $TE(\bm{x}_2, \bm{x}_1)=0$, it means no changes. 
+\end{definition}
+%
+The path-specific effect measures the causal effect of $\bm{X}$ on $Y$ where the intervention is transferred only along a subset of causal paths from $\bm{X}$ to $Y$, which is also referred to as the $\pi$-specific effect, denoting the subset of causal paths as $\pi$.
+%
+\begin{definition}[Path-specific effect]
+    \label{def:se}
+    Given a path set $\pi$, the $\pi$-specific effect of the value change of $\bm{X}$ from
+    $\bm{x}_1$ to $\bm{x}_2$ on $Y$ (with reference $\bm{x}_1$) is given by $SE_\pi(\bm{x}_2, \bm{x}_1) = P (Y_{\bm{x}_2}|\pi ) - P (Y_{\bm{x}_1}|\pi )$, 
+    where $P(Y_{\bm{x}}|\pi)$. When $SE_\pi(\bm{x}_2, \bm{x}_1)=0$, it means no specific effect.
+\end{definition}    
+%
+In both the total effect and path-specific effect, the intervention is applied to the entire population.
+The counterfactual effect measures the causal effect while the intervention is performed, conditioning on only certain individuals or groups specified by a subset of observed variables $\bm{O = o}$.
+\begin{definition}[Counterfactual effect]
+    \label{def:ce}
+    Given a context $\bm{O = o}$, the counterfactual effect of the value change of $\bm{X}$ from $\bm{x}_1$ to $\bm{x}_2$ on $Y$ is given by $CE(\bm{x}_2, \bm{x}_1|\bm{o}) = P (Y_{\bm{x}_2}|\bm{o}) - P (Y_{\bm{x}_1} |\bm{o})$.
+\end{definition}    
+%
+
+\subsubsection*{Architectures}
+The paper proposes three kinds of architecture based on the definition of fairness to adopt.    
+We recall that all architectures adopt two generators denoted as $G^1$ and $G^2$ that share the same weights for each subnetwork $G_i \quad \forall_i \in \bm{X}$.
+
+\paragraph{CFGAN based on Total Effect}
+
+\textit{CFGAN based on Total Effect} is the simplest architecture and tries to minimise the change in the Total effect notion (Definition~\ref{def:te}). 
+Similarly to CausalGAN (Section~\ref{sec:causal_gan}), $G^1$ aims to approximate the true distribution $P(\bm{X})$. 
+On the other hand, in $G^2$, an intervention of $s$ is applied, in formula $P(Y|\mathrm{do}(S=S))$, and the aim is to minimise the Total effect.
+We identify $P(Y_{s+})$ when $s=1$ and $P(Y_{s-})$ when $s=0$.
+Concerning the discriminators, $D^1$ is designed to distinguish between the real data $(x, y, s) \sim P(\bm{X}, Y, S)$ and the generated data $(\bm{x}', y', s') \sim P_{G^1}(\bm{X}', Y', S')$. 
+$D^2$ is employed to distinguish between the two interventional distributions: $y'_{s+} \sim P_{G^2}(Y'_{s+})$ and $y'_{s-} \sim P_{G^2}(Y'_{s-})$.
+Thus, the overall cost function is defined as in Equation~\ref{eq:overall_loss} where:
+
+\begin{equation}
+    \begin{split}
+        J_1(G^1, D^1) &= \mathbb{E}_{(\bm{x}, y, s) \sim P(\bm{X}, Y, S)}[\log D^1(\bm{x}, y, s)] + \mathbb{E}_{(\bm{x}', y', s') \sim P_{G^1}(\bm{X}', Y', S')}[1 - \log D^1(\bm{x}', y', s')]
+        \\
+        J_2(G^2, D^2) &= \mathbb{E}_{y'_{s^+} \sim P_{G^2}(Y'_{s^+})}[\log D^2(y'_{s^+})] + \mathbb{E}_{y'_{s^-} \sim P_{G^2}(Y'_{s^-})}[1 - \log D^2(y'_{s^-})]
+    \end{split}
+    \label{eq:CFGAN_te}
+\end{equation}
+
+Optimising Equation~\ref{eq:CFGAN_te} means obtaining a situation in which $P(Y'_{s+}) \sim P(Y'_{s-})$ that corresponds to no total effect change (Definition~\ref{def:te}). 
+In other words, we trained a GAN to generate the same data distribution independently of the sensitive attribute.
+
+\paragraph{CFGAN based on Indirect Discrimination}
+
+To mitigate the indirect discrimination (Definition~\ref{def:se}), the authors change $G^2$.
+They consider two types of value settings for the sub-network $G^2$: \emph{(i)} the reference setting and \emph{(ii)} the interventional setting.
+In the reference setting $G^2_s = 0$ always, for interventional setting $G^2_s = 1$ if $s = s^+$ and $G^2_s = 0$ if $s = s^-$.
+Thus, each sub-network may output two types of sample values according to the value setting of $ G^2$. 
+For a sub-network, if its corresponding node is not on any path in $\pi$, it always takes reference values as input and outputs reference values. 
+For any other sub-network that is on at least one path in $\pi$, it may take both types of values as input and output both. Figure~\ref{fig:CFGAN_pi_effect} shows an example. 
+To achieve no indirect discrimination, the loss change as follows:    
+%
+\begin{equation}
+    J_2(G^2, D^2) = \mathbb{E}_{y'_{s^+|\pi} \sim P_{G^2}(Y'_{s^+|\pi})}[\log D^2(y'_{s^+|\pi})] + \mathbb{E}_{y'_{s^-|\pi} \sim P_{G^2}(Y'_{s^-|\pi})}[1 - \log D^2(y'_{s^-|\pi})]
+    \label{eq:CFGAN_se}
+\end{equation}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.70\linewidth]{img/CFGAN.png}
+    \caption{An example of the generator $G^2$ for CFGAN based on indirect discrimination. $S$ is set to $1$ or $0$ and the transmission is set only along $\pi$ = $\{S \to B \to Y \}$ to sample from the interventional distributions $P_{G^2}(A_{s^+}|\pi, B_{s+}|\pi , Y_{s+}|\pi)$ (red) and $P_{G^2} (A_{s^-}|\pi , B_{s^-}|\pi , Y_{s^-}|\pi )$ (green) respectively. $S$ is set to be $0$ for the reference setting.}
+    \label{fig:CFGAN_pi_effect}
+\end{figure}
+
+\paragraph{CFGAN for Counterfactual Fairness}
+In counterfactual fairness (Definition~\ref{def:ce}), the intervention is performed conditioning on a subset of variables $\bm{O}  = \bm{o}$.   
+What changes concerning the previous cases are the conditioning. 
+Previously, we conditioned only on $S$ (Total Effect and Indirect Discrimination); now we condition also on the subset features $\bm{O}$ (e.g., $\bm{O} = \{race, native\_country\}$).
+Specifically, first we generate samples with $G^1$ (the generator that tends to approximate the true distribution, as $J_1$ in Equation~\ref{eq:CFGAN_te}), then we take noise vectors $\bm{z}$ that generate samples in which $\bm{O}= \bm{o}$ (i.e., samples in which certain features have specific values). 
+Finally, we utilise $G^2$, with the noise vector $\bm{z}$, to generate samples from the interventional distribution on $S$ and $\bm{O}$ denoted by $P_{G^2}(\bm{X}'_s,Y'_s|\bm{o})$. 
+The discriminator $D^2$ is revised to distinguish from $y'_{s^+|o} \sim P(Y'_{s+|o})$ and $y'_{s^-|o} \sim P(Y'_{s-|o})$.
+Hence, $J_2$ loss function becomes:
+
+\begin{equation}
+    J_2(G^2, D^2) = \mathbb{E}_{y'_{s^+|\bm{o}} \sim P_{G^2}(Y'_{s^+|\bm{o}})}[\log D^2(y'_{s^+|\bm{o}})] + \mathbb{E}_{y'_{s^-|\bm{o}} \sim P_{G^2}(Y'_{s^-|\bm{o}})}[1 - \log D^2(y'_{s^-|\bm{o}})]
+    \label{eq:CFGAN_ce}
+\end{equation}
+
+\subsection{DECAF}
+\label{sec:DECAF}
+DEbiasing CAusal Fairness (DECAF)~\cite{DBLP:DECAF} denotes a generic approach that assumes a given causal graph $\mathcal{G}$ and learns the structural equations through conditional GANs as done for CausalGAN (Section~\ref{sec:causal_gan}).
+Before generating the data, we intervene in the derived SCM by removing dependencies that lead to unfairness in a downstream model (these can be specific to the fairness metric considered). 
+Then we sample data by applying the (GAN–-based) structural equations that remain after these dependencies are removed. 
+To understand the logic behind DECAF, we have to introduce some definitions.
+
+
+\begin{definition}[Distributional fairness]
+  A probability distribution $P'(\bm{X})$ is $(\mathcal{I}(A, Y), P)-fair$, iff the optimal predictor $\hat{Y}$ trained on $P'(\bm{X})$ satisfies $\mathcal{I}(A,Y)$, when evaluated on $P(\bm{X})$.
+  \label{def:distr_fairness}
+\end{definition}
+
+In other words, when we train a predictor on $(\mathcal{I}(A, Y), P)-fair$ distribution $P'(\bm{X})$, we can only reach maximum performance if our model is fair. 
+Note that the predictor is evaluated on the original distribution data.
+From a graphical point of view, let $\mathcal{G}$ be an assumed graph faithfully with respect to the distribution $P(\bm{X})$, and $\mathcal{G}' \subset \mathcal{G}$ (where some edges are removed) faithfully with respect to $P'$. 
+The graphical condition is:
+%
+\begin{definition}[Graphical condition]
+  If for all $B \in \partial_{\mathcal{G}'}Y, A \indep_\mathcal{G} B|R$ then the distribution $P'(\bm{X})$ is CF (Definition~\ref{def:cf}) fair w.r.t $P(\bm{X})$ given explanatory factor $\bm{R}$.
+  \label{def:graph_condition}
+\end{definition}
+%
+Where $\indep_\mathcal{G}$ denotes d-separation in $\mathcal{G}$ and $\partial_{\mathcal{G}'}Y$ denotes the Markov boundary of $Y$ in graph $\mathcal{G}'$.
+This led to the following corollary:
+
+\begin{corollary}[CF debiasing]
+    Any distribution $P'(\bm{X})$ with a graph $\mathcal{G}'$ can be made $CF$ fair w.r.t $P(\bm{X})$ and explanatory features $\bm{R}$ by removing from $\mathcal{G}'$ edges $E = \{(B \to Y) \text{ and } (Y \to B): \forall B \in \partial_{\mathcal{G}'}Y \text{ with } B \indep_\mathcal{G} A |\bm{R} \}$.
+    \label{cor:cf_debiasing}
+\end{corollary}
+%
+For FTU (Definition~\ref{def:ftu}) (i.e.\ $\bm{R} = \bm{X} \setminus A$) and DP (Definition~\ref{def:dp}) (i.e.\ $\bm{R} = \varnothing$), Corollary~\ref{cor:cf_debiasing} simplifies to:
+%
+\begin{corollary}[FTU debiasing]
+    Any distribution $P'(\bm{X})$ with graph $\mathcal{G}'$ can be made FTU (Definition~\ref{def:ftu}) fair w.r.t.\ any distribution $P(\bm{X})$ by removing, if present, i) the edge between $A$ and $Y$ and ii) the edge $A \to C$ or $Y \to C$ for all shared children $C$.
+    \label{cor:ftu_debias}
+\end{corollary}
+%
+\begin{corollary}[DP debiasing]
+    Any distribution $P'(\bm{X})$ with graph $\mathcal{G}'$ can be made DP (Definition~\ref{def:dp}) fair w.r.t.\ $P(\bm{X})$ by removing, if present, the edge between $B$ and $Y$ for any $B \in \partial_{\mathcal{G}'}Y$ with $B \nindep_\mathcal{G} A$.
+    \label{cor:dp_debias}
+\end{corollary}
+%
+DECAF has two distinct phases: the training and the inference. 
+During the training stage, it learns the causal conditionals observed in the data through a causally informed GAN. 
+At the generation (inference) stage, it intervenes on the learned conditionals, in such a way that the generator creates fair data. 
+
+\begin{figure}
+    \centering
+    \includegraphics[width=1\linewidth]{img/decaf_architecture.png}
+    \caption{DECAf architecture}
+    \label{fig:decaf}
+\end{figure}
+
+\paragraph{Training.} Each structural equation $f_i$ (Equation~\ref{eq:scm}) is modelled by a separate conditional GAN $G_i: \mathbb{R}^{|Pa(X_i)+1|} \to \mathbb{R}$ as done in CausalGAN (Section~\ref{sec:causal_gan}).
+The generator takes as input the parents of $\bm{X}_i$ and a random noise $\bm{z}$. 
+Hence, the features are generated sequentially following the topological ordering of the underlying causal DAG. 
+Subsequently, the synthetic sample $\bm{x}'$ is passed to a discriminator $D: \mathbb{R}^d \to [0,1]$, which is trained to distinguish the generated samples from original samples (see Equation~\ref{eq:gan_loss}).
+
+\paragraph{Inference.} The training phase yields conditional generators $\{G_i\}_{i=1}^d$ which can be sequentially applied to generate data with the same output distribution as the original data.
+The key aspect of DECAF is the possibility to model the graph, by removing edges, to satisfy certain fairness notions (introduced in Corollary~\ref{cor:ftu_debias} and~\ref{cor:dp_debias}).
+This avoids the characteristics (such as causal relations) that we do not want to propagate in the SD. 
+Removing an edge means applying a \emph{do-operation} on the conditional distribution. 
+For example, suppose we only want to remove $(i \to j)$:  $X_i$ is generated normally, but $\bm{X}_j$ is generated using the modified SEM, i.e., fixing $\bm{X}_j = \alpha$ or sampling it from the empirical marginal distribution. 
+
+
+\subsection{CFSDG}
+\label{sec:CFSDG}
+Counterfactual Fairness in Synthetic Data Generation (CFSDG)~\cite{counterfactual} represents the most recent paper analysed.
+As in previous works, assume a causal graph $\mathcal{G}$ and a dataset $\mathcal{D}$ that comprise $\bm{X}$, $A$, $Y$ the unobservable variable $U$, as in Figure~\ref{fig:CFSDG}.
+The intuition behind the architecture is to force the model to produce the same samples for all individuals in $A$ through counterfactual reasoning (see Definition~\ref{def:cof}).   
+To achieve this, the authors revisited the classical GAN architecture (Section~\ref{sec:gan}) as follows. 
+
+The model consists of two generators, $G^1$ and $G^2$, and one discriminator $D$. 
+Unlike previous works, generators are classical neural networks.  
+The $G^1$ and $G^2$ share the same weight and take the same noise input vector $\bm{z}$ (the authors refer to the noise vector $\bm{z}$ as the unobservable variable $U$ from the causal reasoning point of view). 
+The generator $G^1$ takes as input the sensitive attribute $a$ drawn from the marginal distribution, i.e., $a \sim P(A)$; on the other hand, the generator $G^2$ takes $\neg a$.
+The discriminator $D$ aims to distinguish between the real and fake, as designated for $D^1$ in CFGAN (Section~\ref{sec:CFGAN}). 
+Moreover, an additional loss is considered. 
+The counterfactual loss ensures that the $Y'$s generated by $G^1$ are as close as possible to those generated by $G^2$. In formula:
+
+\begin{equation}
+    \begin{split}
+        J_1 &= \mathbb{E}_{(x,a,y) \sim P(\bm{X},A,Y)} \log [D(x,a,y)] + \mathbb{E}_{u \sim P(U),a \sim P(A))}[\log (1- D(G(u,a)))] \\
+        J_2 &= -\mathbb{E}_{u \sim P(U),a \sim P(A)}[\log (1-D(G(u,a))) - \lambda (G_Y(u,a) - G_Y(u,\neg a))^2]
+    \end{split}
+    \label{eq:cfsdg_loss}
+\end{equation}
+The parameter $\lambda$ balances the satisfaction of the fairness notion.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{img/CFSDG.png}
+    \caption{Architecture of CFSDG}
+    \label{fig:CFSDG}
+\end{figure}
+
+
+\section{Discussion}
+\label{sec:discussion}
+
+FairGAN (Section~\ref{sec:fairgan}) aim to create generative models which produce datasets that satisfy the Demographic Parity (Definition~\ref{def:dp}). 
+They discussed that a naive solution, in which the model is trained only with $\bm{X}$ and $Y$; and $A$ is randomly sampled, is not a good solution, since $\bm{X}$ and $Y$ may inherit discrimination and thus, $A$ may be predictable given the other features. 
+However, subsequent work (Sections~\ref{sec:CFGAN},~\ref{sec:DECAF},~\ref{sec:CFSDG}) criticised FairGAN since the architecture is limited to satisfy only the DP notion in the ynthetic dataset, and they argue how the causal reasoning can be integrated in the training process to provide stronger fairness guarantees. 
+Nevertheless, methods such as CFGAN (Section~\ref{sec:CFGAN}) and DECAF (Section~\ref{sec:DECAF}) require having causal knowledge about data sources.
+
+With CFGAN, the idea was born to introduce the \emph{do-operator} in order to minimise the difference in distribution among the protected values using the interventions and the counterfactuals (see Section~\ref{sec:scm}). 
+Experimental results show that CFGAN  w.r.t. FairGAN perform worse in Total effect (Definition~\ref{def:te}) but better in Path-specific effect (Definition~\ref{def:se})~\cite{DBLP:CFGAN}[Table 1].
+
+Although good results were achieved by CFGAN, DECAF pointed out a relevant limitation: the lack of treatment for multiple protected attributes. 
+The DECAF's goal is not limited to achieving statistical constraint in the data, but also claims that the predictors trained on such data are fair too \footnote{When we discuss CFSDG, we will discover that this is not theoretically grounded.}.
+Even if its goal is slightly different from the previous ones, it proposes an architecture that not only allows multiple protected attributes but also manages different notions of fairness and ``guarantees'' fair predictors.
+However, in the article, there is no guarantee that $P'$ and $P$ are even remotely close. 
+
+For example, consider a dataset where we have $A \to X \to Y$.
+Assume that $A := Ber(0.5)$, $X := m \times \mathds{1}\{a=0\}$ and $Y := \mathcal{N}(X, 1)$.
+Now, for satisfying DP (Definition~\ref{cor:dp_debias}), we need to remove both edges from $A$ to $X$ and then from $X$ to $Y$, then $Y$ will be either constant or a distribution independent from $X$ and so $m$. Increasing $m$ we can have a large KL-distance between $P$ and $P'$.
+
+The last paper, CFSDG (Section~\ref{sec:CFSDG}), proposes to achieve fairness to counterfactual loss.
+The main difference w.r.t. the rest of the papers lies in the intended effect of the generated data on machine learning models trained on it. 
+The CFSDG aims to create a synthetic dataset where an accurate predictor is also a fair one. 
+The goal is to align the incentives of the data user so that maximising accuracy naturally leads to a fair classifier. It does not force every possible classifier to be fair.
+DECAF and FairGAN's goals are much stronger; they aim to create a dataset such that every predictor trained on it will satisfy DP.
+This is a more stringent condition on the data itself. 
+Because, regardless of the data, an end user can always create an unfair predictor (e.g., by only accepting men, regardless of the other features). 
+This is in contrast with CFSDG's definition, which only expects an accurate predictor to be fair.
+
+
+
+%aggugere che sebbere cfgan e gli altri perfomano meglio richiedono il CF che non sempre è possible ottenere
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This report examined some of the most relevant works in fairness-aware SDG methods.
+Starting from FairGAN, which introduced fairness constraints to address DP, we examined further approaches such as CFGAN, DECAF, and CFSDG, which incorporate causal models and counterfactual reasoning to provide stronger fairness guarantees.
+While early models like FairGAN primarily aimed to address the DP constraint, recent methods, such as CFGAN, introduced interventions and counterfactuals into the generative process. 
+In contrast, DECAF formalised fairness through graphical conditions, enabling flexible debiasing strategies.
+Finally, CFSDG shifted the focus toward counterfactual reasoning to align fairness with predictive accuracy.
+Despite several contributions, some challenges remain.
+Most approaches assume access to causal graphs, which is often unrealistic to have or discover through Causal discovery.
+
+All the proposed architectures yield excellent results in both data utility and fairness; however, they operate as black boxes.
+CausalGAN models provide insight into the generative process, since the underlying CF is understandable to a domain expert.
+Nevertheless, sub-generators, implemented as GANs, remain directly uninterpretable.  
+Future research may explore the use of interpretable generators to replace GANs, thereby achieving full comprehensibility of the data generation process. 
+
+
+\printbibliography
+\end{document}
+
