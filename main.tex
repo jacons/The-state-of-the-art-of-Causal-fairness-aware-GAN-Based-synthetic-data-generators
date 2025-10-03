@@ -12,10 +12,13 @@
 \usepackage{xcolor}
 \usepackage{todonotes}
 \usepackage{dsfont}
+\usepackage[export]{adjustbox}
 
 \newcommand{\indep}{\perp \!\!\! \perp}
 \newcommand{\nindep}{\not\perp\!\!\!\perp}
 \newcommand{\xbold}{\bm{x}}
+\newcommand{\done}{\includegraphics[width=0.02\linewidth,valign=c]{img/done.png}}
+\newcommand{\rejected}{\includegraphics[width=0.02\linewidth,valign=c]{img/rejected.png}}
 
 \newtheorem{definition}{Definition}
 \newtheorem{corollary}{Corollary}
@@ -93,7 +96,7 @@ In formula:
 \paragraph{Counterfactual.}
 Beyond interventions, SCMs enable reasoning about \emph{counterfactuals}, i.e., statements of the form: ``What would $Y$ have been if $\bm{X}$ had taken value $x$, given that we observed evidence $\bm{X} = \bm{x}$?''.
 Counterfactual queries require three steps: (i) \emph{abduction}, where we update the distribution of exogenous variables $\mathbf{U}$ given the observed evidence; (ii) \emph{action}, where we modify the model by applying the intervention $\mathrm{do}(\bm{X} = \bm{x})$; and (iii) \emph{prediction}, where we compute the value (or distribution) of $Y$ in the modified model using the inferred $\mathbf{U}$.
-In formula~\footnote{I have slightly change the notation presented in~\cite{DBLP:PearlCausality2009}, however it is should be ok}:
+In formula~\footnote{I have slightly change the notation presented in~\cite{DBLP:PearlCausality2009}, to be consistent with the whole report.}:
 \begin{equation}
     \mathcal{M}_{\bm{X}=\bm{x}} := \langle \mathbf{U}, P(\mathbf{U})^{\mathcal{M}|\bm{X}=\bm{x}}, \bm{X}, \mathbf{F} \rangle
     \label{eq:counterfactual}
@@ -418,6 +421,7 @@ The parameter $\lambda$ balances the satisfaction of the fairness notion.
 \section{Discussion}
 \label{sec:discussion}
 
+Table \ref{tab:comparison} shows the main difference among the generative models.
 FairGAN (Section~\ref{sec:fairgan}) aims to create generative models that produce datasets satisfying Demographic Parity (Definition~\ref{def:dp}). 
 They discussed that a naive solution, in which the model is trained only with $\bm{X}$ and $Y$; and $A$ is randomly sampled, is not a good solution, since $\bm{X}$ and $Y$ may inherit discrimination and thus, $A$ may be predictable given the other features. 
 However, subsequent work (Sections~\ref{sec:CFGAN},~\ref{sec:DECAF},~\ref{sec:CFSDG}) criticised FairGAN since the architecture is limited to satisfy only the DP notion in the ynthetic dataset, and they argue how the causal reasoning can be integrated in the training process to provide stronger fairness guarantees. 
@@ -437,7 +441,7 @@ Now, for satisfying DP (Definition~\ref{cor:dp_debias}), we need to remove both 
 Increasing $m$, we can have a large KL-distance between $P$ and $P'$.
 
 The last paper, CFSDG (Section~\ref{sec:CFSDG}), proposes to achieve fairness to counterfactual loss.
-The main difference w.r.t. the rest of the papers lies in the intended effect of the generated data on machine learning models trained on it. 
+The main difference with respect to the rest of the papers lies in the intended effect of the generated data on machine learning models trained on it. 
 The CFSDG aims to create a synthetic dataset where an accurate predictor is also a fair one. 
 The goal is to align the incentives of the data user so that maximising accuracy naturally leads to a fair classifier. It does not force every possible classifier to be fair.
 DECAF and FairGAN's goals are significantly stronger; they aim to create a dataset such that every predictor trained on it will satisfy the DP.
@@ -446,8 +450,21 @@ Because, regardless of the data, an end user can always create an unfair predict
 This is in contrast with CFSDG's definition, which only expects an accurate predictor to be fair.
 
 
-
-%aggugere che sebbere cfgan e gli altri perfomano meglio richiedono il CF che non sempre è possible ottenere
+\begin{table}[h]
+    \centering
+    \begin{tabular}{|c|c|c|c|c|}
+        \hline
+        \textbf{Framework}                  & \textbf{FairGAN}~\cite{DBLP:Xu_Depeng} & \textbf{CFGAN}~\cite{DBLP:CFGAN} & \textbf{DECAF}~\cite{DBLP:DECAF} & \textbf{CFSDG}~\cite{counterfactual} \\ \hline
+        \textbf{Only binary $A$}            & \done            & \done          & \rejected      & \done          \\ \hline
+        \textbf{Causal Notion of f.}        & \rejected        & \done          & \done          & \done          \\ \hline
+        \textbf{Require $\mathcal{G}$}      & \rejected        & \done          & \done          & \rejected      \\ \hline
+        \textbf{Interventional f.}          & \rejected        & \done          & \rejected      & \rejected      \\ \hline
+        \textbf{Fairness in $\mathcal{L}$}  & \done            & \done          & \rejected      & \done          \\ \hline
+        \textbf{Counterfactual f.}          & \rejected        & \rejected      & \rejected      & \done          \\ \hline
+    \end{tabular}
+    \label{tab:comparison}
+    \caption{The table shows the main difference among the algorithms.}
+\end{table}
 
 \section{Conclusion}
 \label{sec:conclusion}
