@@ -9,16 +9,16 @@
 \usepackage{amssymb} 
 \usepackage{amsthm}
 \usepackage{bm}
-\usepackage{xcolor}
+\usepackage[table,xcdraw]{xcolor}
 \usepackage{todonotes}
 \usepackage{dsfont}
+\usepackage{pifont}
 \usepackage[export]{adjustbox}
 
 \newcommand{\indep}{\perp \!\!\! \perp}
 \newcommand{\nindep}{\not\perp\!\!\!\perp}
 \newcommand{\xbold}{\bm{x}}
-\newcommand{\done}{\includegraphics[width=0.02\linewidth,valign=c]{img/done.png}}
-\newcommand{\rejected}{\includegraphics[width=0.02\linewidth,valign=c]{img/rejected.png}}
+
 
 \newtheorem{definition}{Definition}
 \newtheorem{corollary}{Corollary}
@@ -53,7 +53,7 @@ Each paper presented outlines the limitations of the previous works.
 \paragraph{Motivation.} Synthetic data generation (SDG) denotes an essential tool for Machine Learning (ML), particularly in high-risk fields such as healthcare~\cite{DBLP:MurtazaAKMZB23}, business~\cite{DBLP:Assefa_Samuel}, or recruitment~\cite{DBLP:Beretta_Andrea}.
 In many of these applications, privacy concerns and regulations make it impossible to release real datasets, creating a bottleneck for training ML architectures. 
 Synthetic data (SD) offers a promising solution by creating a dataset that resembles the real data while protecting the privacy of individuals.
-Another essential challenge is related to the fairness of the data. 
+The privacy limitations are not the only aspect; another essential challenge is related to the fairness of the data. 
 Historical datasets often contain inherent biases, and ML models trained on such data can reflect and even exacerbate existing discrimination. 
 A subfield of the SDG work on removing these discriminatory biases before the data is used. 
 In other words, the goal is to produce datasets that are similar to the original data, but discrimination-free, so that any downstream model trained on them will also be fair.
@@ -109,13 +109,13 @@ The new set of noise variables is no longer jointly independent.
 \label{sec:sdg_def} 
 Let $\mathcal{D} = \{\mathcal{X},\mathcal{Y},\mathcal{A}\} \sim P_{data}$ (simply $P$) be a dataset where $\mathcal{X}$ is the unprotected features, $\mathcal{Y}$ is the target, and $\mathcal{A}$ is the protected feature drawn from a data distribution $P$. 
 Denote $\mathcal{Q}$ as a concatenation of the unprotected features $\mathcal{X}$ and the protected feature $\mathcal{A}$, i.e., $ \mathcal{Q} = \mathcal{X} \cup \mathcal{A}$.
-The ``Fairness'' generative models aim to approximate the distribution $P$ with $P'$ such that a synthetic dataset $\mathcal{D}' \sim P'$ is as close as possible to $\mathcal{D}$ and discrimination-free. 
+The ``fair'' generative models aim to approximate the distribution $P$ with $P'$ such that a synthetic dataset $\mathcal{D}' \sim P'$ is as close as possible to $\mathcal{D}$ and discrimination-free. 
 This property ensures that ML models trained on that data are fair~\cite{DBLP:DECAF, DBLP:Xu_Depeng}. 
-For the remainder of the paper, we use the following notation: we refer to the training set and data distribution as $\mathcal{D}$ and $P$, respectively.
+For the remainder of the paper, we use the following notation: we refer to the training set and real data distribution as $\mathcal{D}$ and $P$, respectively.
 Instead, we denote the distribution approximated by the model and the synthetic dataset as $P'$ and $\mathcal{D'}$.
-
-\label{sec:fairness_notions}
 Finally, we refer to $\bm{X}$ as a random variable that encompasses the unprotected features, $A$ the protected attribute, $Y$ the target (often referred to as ``decision'') and $\hat{Y} = f: \mathcal{Q} \to \mathcal{Y}$ as a downstream task predictor.
+
+To keep the work self-contained for the rest of this section, we describe the principal notion of fairness. 
 
 \begin{definition}[Fairness Through Unawareness (FTU)]
     A predictor $\hat{Y}$ is fair iff protected attributes $A$ are not explicitly used in the prediction.
@@ -182,17 +182,20 @@ In summary, in the vanilla GAN, the generator is a single neural network; on the
 \subsection{FairGAN}
 \label{sec:fairgan}
 Fairness-aware Generative Adversarial Network (FairGAN)~\cite{DBLP:Xu_Depeng} is one of the first papers that exploits a GAN--based approach to tackle the discrimination in tabular SDG. 
-The intuition behind the model is to extend the vanilla GAN architecture (Section~\ref{sec:gan}) by imposing an additional fairness constraint. 
+The core idea is to extend the vanilla GAN architecture (Section~\ref{sec:gan}) by incorporating a fairness constraint into the loss function. 
 The constraint motivates the model to make both the unprotected features and the target independent of the protected attribute. 
+The authors show that a generator trained under this principle produces synthetic data such that \textit{\textbf{any}} classifier trained on it (i.e., ${\hat{\bm{X}}, \hat{Y}}$) satisfies the Demographic Parity (DP) criterion on real datasets.
 
-Let us assume a dataset $\mathcal{D}$ (as defined in Section~\ref{sec:sdg_def}) where both target $\mathcal{Y}$ and the protected feature $\mathcal{A}$ are binary.
+Formally, let us assume a dataset $\mathcal{D}$ (as defined in Section~\ref{sec:sdg_def}) where both target $\mathcal{Y}$ and the protected feature $\mathcal{A}$ are binary.
 The architecture consists of one generator, $G$, and two discriminators, $D^1$ and $D^2$. 
 The generator generates fake samples $\mathcal{D}' = \{(\bm{x}', y')\}$ conditioned on the protected attribute $a \sim P(A)$, $D^1$ aims to ensure that generated data $\{(\bm{x}', a, y')\}$ is close to the real data $\{(\bm{x}, a , y)\}$ as possible, while the other discriminator $D^2$ aims to ensure there are no correlation between $\bm{X}'$ and $A$ and no correlation between $Y'$ and $A$.
-$a$ is a sample from the marginal distribution of the dataset $\mathcal{D}$.
+The architecture requires that the protected attribute $a$ represents an input for the generator, in addition to the noise. Such $a$ is sampled from the marginal distribution of the dataset $\mathcal{D}$.
 
-In other words, FairGAN generates the unprotected attributes $\bm{x}'$ and decision $y'$ given the protected attribute $a$, and achieves $\bm{X}' \indep A$ and $Y' \indep A$. Therefore, the generated data can meet the requirements in terms of Demographic parity (Definition~\ref{def:dp}) and FTU (Definition~\ref{def:ftu}).
-FairGAN tries to optimise: 
+In summary, FairGAN generates unprotected attributes $\bm{x}'$ and decision $y'$ given $a$, while ensuring $I(\hat{X}, \hat{Y}, A) = 0$.
+Thus, the synthetic data satisfies Demographic Parity (Definition~\ref{def:dp}) and FTU (Definition~\ref{def:ftu}).
 
+\newpage
+Mathematically, FairGAN optimises:
 \begin{equation}
     \min_{G} \max_{D^1, D^2} J(G, D^1, D^2) = J_1(G, D^1) + \lambda J_2(G, D^2)
     \label{eq:overall_loss}
@@ -208,10 +211,12 @@ where:
     \end{split}
     \label{eq:fairgan_loss}
 \end{equation}
-The parameter $\lambda$ balances the satisfaction of the fairness notion.
+
+The parameter $\lambda$ controls the trade-off between realism and fairness.
 Figure~\ref{fig:fairgan} shows the model's architecture. 
-Focusing on the objective function, the discriminator $D^2$ tries to distinguish the data distribution derived from the different protected value conditions. 
-The generator should achieve the situation in which $P_G(\bm{X}',Y'|A=0) \approx P_G(\bm{X}', Y' | A=1)$.
+Focusing on the second objective function in the Equation~\ref{eq:fairgan_loss}, $J_2$ incentivises the discriminator $D^2$ to try to distinguish the data distribution derived from the different protected value conditions (i.e., data in which $A=1$ from data where $A=0$) while the generator tries to fool it. 
+In the trained model, we achieve the situation in which $P_G(\bm{X}',Y'|A=0) \approx P_G(\bm{X}', Y' | A=1)$. 
+The principal limitation of FairGAN will be discussed in Section~\ref{sec:discussion}.
 
 \begin{figure}
     \centering
@@ -222,7 +227,7 @@ The generator should achieve the situation in which $P_G(\bm{X}',Y'|A=0) \approx
 
 \subsection{Causal fairness-aware GAN}
 \label{sec:CFGAN}
-Causal fairness-aware GAN (CFGAN)~\cite{DBLP:CFGAN} represents GAN--based SDG, which ensures fairness in the synthetic dataset by using the fairness notion (see Section~\ref{sec:fairness_notions}) integrated in the loss functions.
+Causal fairness-aware GAN (CFGAN)~\cite{DBLP:CFGAN} represents GAN--based SDG, which ensures fairness in the synthetic dataset by using the fairness notion (see Section~\ref{sec:sdg_def}) integrated in the loss functions.
 The architecture is similar to FairGAN (Section~\ref{sec:fairgan}), but also exploits causal reasoning (Section~\ref{sec:scm}). 
 In detail, CFGAN relies on the CausalGAN (Section~\ref{sec:causal_gan}) but extends the architecture by including an additional generator and discriminator.
 Hence, the model consists of two generators, $G^1$ and $G^2$, and two discriminators, $D^1$ and $D^2$. 
@@ -424,11 +429,16 @@ The parameter $\lambda$ balances the satisfaction of the fairness notion.
 Table \ref{tab:comparison} shows the main difference among the generative models.
 FairGAN (Section~\ref{sec:fairgan}) aims to create generative models that produce datasets satisfying Demographic Parity (Definition~\ref{def:dp}). 
 They discussed that a naive solution, in which the model is trained only with $\bm{X}$ and $Y$; and $A$ is randomly sampled, is not a good solution, since $\bm{X}$ and $Y$ may inherit discrimination and thus, $A$ may be predictable given the other features. 
-However, subsequent work (Sections~\ref{sec:CFGAN},~\ref{sec:DECAF},~\ref{sec:CFSDG}) criticised FairGAN since the architecture is limited to satisfy only the DP notion in the synthetic dataset, and they argue how the causal reasoning can be integrated in the training process to provide stronger fairness guarantees. 
-Nevertheless, methods such as CFGAN (Section~\ref{sec:CFGAN}) and DECAF (Section~\ref{sec:DECAF}) require having causal knowledge about data sources.
+Thus, the author built an architecture that guarantees that \textit{any} ML classifier trained on the synthetic data is fair, imposing $I(\hat{\bm{X}}, \hat{Y}, A) = 0$. 
+However, subsequent work (Sections~\ref{sec:CFGAN}, ~\ref{sec:DECAF}, ~\ref{sec:CFSDG}) criticises FairGAN for imposing overly strict independence constraints and for architectural limitations.
+Specifically, they suggest relaxing FairGAN’s constraint: instead of requiring $I(\hat{\bm{X}}, \hat{Y}, A)=0$, it is sufficient to enforce $I(\hat{Y}, A)=0$ to achieve Demographic Parity~\cite{counterfactual}.
+Such strong restrictions reduce the utility of the generated data compared to alternative architectures.
+CFGAN (Section~\ref{sec:CFGAN}) w.r.t FairGAN introduced the notion of causal fairness and more advanced fairness criteria (e.g. total effect, path effect and counterfactual effect). Moreover, experimental results show that CFGAN  w.r.t. FairGAN perform worse in Total effect (Definition~\ref{def:te}) but better in Path-specific effect (Definition~\ref{def:se})~\cite{DBLP:CFGAN}[Table 1].
+
+Nevertheless, methods such as CFGAN and DECAF (Section~\ref{sec:DECAF}), which empirically demonstrate that they outperform FairGAN, require a strong assumption: the availability of a causal graph that is faithful w.r.t. the data distribution in which the trained dataset was derived. 
 
 With CFGAN, the idea was born to introduce the \emph{do-operator} to minimise the difference in distribution among the protected values using interventions and counterfactuals (see Section~\ref{sec:scm}). 
-Experimental results show that CFGAN  w.r.t. FairGAN perform worse in Total effect (Definition~\ref{def:te}) but better in Path-specific effect (Definition~\ref{def:se})~\cite{DBLP:CFGAN}[Table 1].
+.
 
 Although good results were achieved by CFGAN, DECAF pointed out a relevant limitation: the lack of treatment for multiple protected attributes. 
 The DECAF's goal is not limited to achieving statistical constraints in the data, but also claims that the predictors trained on such data are fair as well.
@@ -452,15 +462,21 @@ This is in contrast with CFSDG's definition, which only expects an accurate pred
 
 \begin{table}[h]
     \centering
+    \def\arraystretch{1.2}
     \begin{tabular}{|c|c|c|c|c|}
         \hline
-        \textbf{Framework}                  & \textbf{FairGAN}~\cite{DBLP:Xu_Depeng} & \textbf{CFGAN}~\cite{DBLP:CFGAN} & \textbf{DECAF}~\cite{DBLP:DECAF} & \textbf{CFSDG}~\cite{counterfactual} \\ \hline
-        \textbf{Only binary $A$}            & \done            & \done          & \rejected      & \done          \\ \hline
-        \textbf{Causal Notion of f.}        & \rejected        & \done          & \done          & \done          \\ \hline
-        \textbf{Require $\mathcal{G}$}      & \rejected        & \done          & \done          & \rejected      \\ \hline
-        \textbf{Interventional f.}          & \rejected        & \done          & \rejected      & \rejected      \\ \hline
-        \textbf{Fairness in $\mathcal{L}$}  & \done            & \done          & \rejected      & \done          \\ \hline
-        \textbf{Counterfactual f.}          & \rejected        & \rejected      & \rejected      & \done          \\ \hline
+        \rowcolor[HTML]{C6D8FF} 
+        \textbf{Framework} & \textbf{FairGAN}~\cite{DBLP:Xu_Depeng} & \textbf{CFGAN}~\cite{DBLP:CFGAN} & \textbf{DECAF}~\cite{DBLP:DECAF} & \textbf{CFSDG}~\cite{counterfactual} \\ \hline
+        \textbf{Allow multivalued for $A$}  & \ding{55} & \ding{55} & \ding{51} & \ding{55} \\ \hline
+        \rowcolor[HTML]{EFEFEF} 
+        \textbf{Causal Notion of f.}        & \ding{55} & \ding{51} & \ding{51} & \ding{51} \\ \hline
+        \textbf{Require $\mathcal{G}$}      & \ding{55} & \ding{51} & \ding{51} & \ding{55} \\ \hline
+        \rowcolor[HTML]{EFEFEF} 
+        \textbf{Interventional f.}          & \ding{55} & \ding{51} & \ding{55} & \ding{55} \\ \hline
+        \textbf{Fairness in $\mathcal{L}$}  & \ding{51} & \ding{51} & \ding{55} & \ding{51} \\ \hline
+        \rowcolor[HTML]{EFEFEF} 
+        \textbf{Counterfactual f.}          & \ding{55} & \ding{55} & \ding{55} & \ding{51} \\ \hline
+    
     \end{tabular}
     \label{tab:comparison}
     \caption{The table shows the main difference among the algorithms.}
