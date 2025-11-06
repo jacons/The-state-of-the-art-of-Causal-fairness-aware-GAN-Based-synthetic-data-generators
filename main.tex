@@ -173,7 +173,7 @@ A CausalGAN is constituted by $d$ structural equation $f_i$ (Equation~\ref{eq:sc
 The generator takes as input the parents of $X_i$ and a random noise $\bm{z}$. 
 The features are generated sequentially following the topological ordering of the underlying causal DAG. 
 Subsequently, the synthetic sample $\bm{x}'$ is passed to a discriminator $D$, which is trained to distinguish the generated samples from original samples as in Equation~\ref{eq:gan_loss}.
-In other words, in the vanilla GAN, the generator is a single neural network; on the other hand, in a CausalGAN, the generator is a set of CGANs, one for each feature, which are connected by the causal relationship imposed by the graph $\mathcal{G}$.
+In summary, in the vanilla GAN, the generator is a single neural network; on the other hand, in a CausalGAN, the generator is a set of CGANs, one for each feature, which are connected by the causal relationship imposed by the graph $\mathcal{G}$.
 
 
 \section{Contributions}
@@ -187,10 +187,10 @@ The constraint motivates the model to make both the unprotected features and the
 
 Let us assume a dataset $\mathcal{D}$ (as defined in Section~\ref{sec:sdg_def}) where both target $\mathcal{Y}$ and the protected feature $\mathcal{A}$ are binary.
 The architecture consists of one generator, $G$, and two discriminators, $D^1$ and $D^2$. 
-The generator generates fake samples $\mathcal{D}' = \{(\bm{x}', y')\}$ conditioned on the protected attribute $a \sim P(A)$, $D^1$ aims to ensure that generated data $\{(\bm{x}', a, y')\}$ is close to the real data $\{(\bm{x}, a , y)\}$ as possible, while the other discriminator $D^2$ aims to ensure there are no correlation between $\bm{X}'$ and $S$ and no correlation between $Y'$ and $S$.
+The generator generates fake samples $\mathcal{D}' = \{(\bm{x}', y')\}$ conditioned on the protected attribute $a \sim P(A)$, $D^1$ aims to ensure that generated data $\{(\bm{x}', a, y')\}$ is close to the real data $\{(\bm{x}, a , y)\}$ as possible, while the other discriminator $D^2$ aims to ensure there are no correlation between $\bm{X}'$ and $A$ and no correlation between $Y'$ and $A$.
 $a$ is a sample from the marginal distribution of the dataset $\mathcal{D}$.
 
-In other words, FairGAN generates the unprotected attributes $\bm{x}'$ and decision $y'$ given the protected attribute $a$, and achieves $\bm{X}' \indep S$ and $Y' \indep S$. Therefore, the generated data can meet the requirements in terms of Demographic parity (Section~\ref{def:dp}) and FTU (Section~\ref{def:ftu}).
+In other words, FairGAN generates the unprotected attributes $\bm{x}'$ and decision $y'$ given the protected attribute $a$, and achieves $\bm{X}' \indep A$ and $Y' \indep A$. Therefore, the generated data can meet the requirements in terms of Demographic parity (Definition~\ref{def:dp}) and FTU (Definition~\ref{def:ftu}).
 FairGAN tries to optimise: 
 
 \begin{equation}
@@ -210,7 +210,7 @@ where:
 \end{equation}
 The parameter $\lambda$ balances the satisfaction of the fairness notion.
 Figure~\ref{fig:fairgan} shows the model's architecture. 
-In particular, the discriminator $D^2$ tries to distinguish the data distribution derived from the different protected value conditions. 
+Focusing on the objective function, the discriminator $D^2$ tries to distinguish the data distribution derived from the different protected value conditions. 
 The generator should achieve the situation in which $P_G(\bm{X}',Y'|A=0) \approx P_G(\bm{X}', Y' | A=1)$.
 
 \begin{figure}
@@ -227,7 +227,7 @@ The architecture is similar to FairGAN (Section~\ref{sec:fairgan}), but also exp
 In detail, CFGAN relies on the CausalGAN (Section~\ref{sec:causal_gan}) but extends the architecture by including an additional generator and discriminator.
 Hence, the model consists of two generators, $G^1$ and $G^2$, and two discriminators, $D^1$ and $D^2$. 
 One discriminator is used to optimise the data utility, and another to enforce the fairness constraint.
-We specify that each generator $G$ is composed of a set of sub-generators $G^i = \{G_0^i,\dots, G_d^i\}$.
+Concerning the generators, they are composed of a set of sub-generators, in formula, $G^i = \{G_0^i,\dots, G_d^i\}$ for $i = \{1,2\}$.
 In addition, the framework assumes a dataset $\mathcal{D}$ and a causal graph $\mathcal{G}$ that faithfully respects the dataset.
 The key concept behind the proposed model is to minimise the ``change in distribution'' caused by an intervention or counterfactual in the causal structure. 
 Intuitively, if an intervention on the protected attribute does not change the data distribution, we achieve fairness in the data generation process. 
@@ -246,7 +246,7 @@ The path-specific effect measures the causal effect of $\bm{X}$ on $Y$ where the
     \label{def:se}
     Given a path set $\pi$, the $\pi$-specific effect of the value change of $\bm{X}$ from
     $\bm{x}_1$ to $\bm{x}_2$ on $Y$ (with reference $\bm{x}_1$) is given by $SE_\pi(\bm{x}_2, \bm{x}_1) = P (Y_{\bm{x}_2}|\pi ) - P (Y_{\bm{x}_1}|\pi )$, 
-    where $P(Y_{\bm{x}}|\pi)$. When $SE_\pi(\bm{x}_2, \bm{x}_1)=0$, it means no specific effect.
+    where $P(Y_{\bm{x}}|\pi)$ represents the interventional distribution where the intervention is transferred only along $\pi$. When $SE_\pi(\bm{x}_2, \bm{x}_1)=0$, it means no specific effect.
 \end{definition}    
 %
 In both the total effect and path-specific effect, the intervention is applied to the entire population.
@@ -265,36 +265,36 @@ We recall that all architectures adopt two generators denoted as $G^1$ and $G^2$
 
 \textit{CFGAN based on Total Effect} is the simplest architecture and tries to minimise the change in the Total effect notion (Definition~\ref{def:te}). 
 Similarly to CausalGAN (Section~\ref{sec:causal_gan}), $G^1$ aims to approximate the true distribution $P(\bm{X})$. 
-On the other hand, in $G^2$, an intervention of $s$ is applied, in formula $P(Y|\mathrm{do}(S=s))$, and the aim is to minimise the Total effect.
-We identify $P(Y_{s+})$ when $s=1$ and $P(Y_{s-})$ when $s=0$.
-Concerning the discriminators, $D^1$ is designed to distinguish between the real data $(x, y, s) \sim P(\bm{X}, Y, S)$ and the generated data $(\bm{x}', y', s') \sim P_{G^1}(\bm{X}', Y', S')$. 
-$D^2$ is employed to distinguish between the two interventional distributions: $y'_{s+} \sim P_{G^2}(Y'_{s+})$ and $y'_{s-} \sim P_{G^2}(Y'_{s-})$.
+On the other hand, in $G^2$, an intervention of $a$ is applied, in formula $P(Y|\mathrm{do}(A=a))$, and the aim is to minimise the Total effect.
+We identify $P(Y_{a+})$ when $a=1$ and $P(Y_{a-})$ when $a=0$.
+Concerning the discriminators, $D^1$ is designed to distinguish between the real data $(x, y, a) \sim P(\bm{X}, Y, A)$ and the generated data $(\bm{x}', y', a') \sim P_{G^1}(\bm{X}', Y', A')$. 
+$D^2$ is employed to distinguish between the two interventional distributions: $y'_{a+} \sim P_{G^2}(Y'_{a+})$ and $y'_{a-} \sim P_{G^2}(Y'_{a-})$.
 Thus, the overall cost function is defined as in Equation~\ref{eq:overall_loss} where:
 
 \begin{equation}
     \begin{split}
-        J_1(G^1, D^1) &= \mathbb{E}_{(\bm{x}, y, s) \sim P(\bm{X}, Y, S)}[\log D^1(\bm{x}, y, s)] + \mathbb{E}_{(\bm{x}', y', s') \sim P_{G^1}(\bm{X}', Y', S')}[1 - \log D^1(\bm{x}', y', s')]
+        J_1(G^1, D^1) &= \mathbb{E}_{(\bm{x}, y, a) \sim P(\bm{X}, Y, A)}[\log D^1(\bm{x}, y, a)] + \mathbb{E}_{(\bm{x}', y', a') \sim P_{G^1}(\bm{X}', Y', A')}[1 - \log D^1(\bm{x}', y', a')]
         \\
-        J_2(G^2, D^2) &= \mathbb{E}_{y'_{s^+} \sim P_{G^2}(Y'_{s^+})}[\log D^2(y'_{s^+})] + \mathbb{E}_{y'_{s^-} \sim P_{G^2}(Y'_{s^-})}[1 - \log D^2(y'_{s^-})]
+        J_2(G^2, D^2) &= \mathbb{E}_{y'_{a^+} \sim P_{G^2}(Y'_{a^+})}[\log D^2(y'_{a^+})] + \mathbb{E}_{y'_{a^-} \sim P_{G^2}(Y'_{a^-})}[1 - \log D^2(y'_{a^-})]
     \end{split}
     \label{eq:CFGAN_te}
 \end{equation}
 
-Optimising Equation~\ref{eq:CFGAN_te} means obtaining a situation in which $P(Y'_{s+}) \sim P(Y'_{s-})$ that corresponds to no total effect change (Definition~\ref{def:te}). 
-In other words, we trained a GAN to generate the same data distribution independently of the sensitive attribute.
+Optimising Equation~\ref{eq:CFGAN_te} means obtaining a situation in which $P(Y'_{a+}) \sim P(Y'_{a-})$ that corresponds to no total effect change (Definition~\ref{def:te}). 
+In other words, we trained a GAN to generate the same data distribution independently of the protected attribute.
 
 \paragraph{CFGAN based on Indirect Discrimination}
 
 To mitigate the indirect discrimination (Definition~\ref{def:se}), the authors change $G^2$.
 They consider two types of value settings for the sub-network $G^2$: \emph{(i)} the reference setting and \emph{(ii)} the interventional setting.
-In the reference setting $G^2_s = 0$ always, for interventional setting $G^2_s = 1$ if $s = s^+$ and $G^2_s = 0$ if $s = s^-$.
+In the reference setting $G^2_s = 0$ always, for interventional setting $G^2_a = 1$ if $a = a^+$ and $G^2_a = 0$ if $a = a^-$.
 Thus, each sub-network may output two types of sample values according to the value setting of $ G^2$. 
 For a sub-network, if its corresponding node is not on any path in $\pi$, it always takes reference values as input and outputs reference values. 
 For any other sub-network that is on at least one path in $\pi$, it may take both types of values as input and output both. Figure~\ref{fig:CFGAN_pi_effect} shows an example. 
 To achieve no indirect discrimination, the loss changes as follows:    
 %
 \begin{equation}
-    J_2(G^2, D^2) = \mathbb{E}_{y'_{s^+|\pi} \sim P_{G^2}(Y'_{s^+|\pi})}[\log D^2(y'_{s^+|\pi})] + \mathbb{E}_{y'_{s^-|\pi} \sim P_{G^2}(Y'_{s^-|\pi})}[1 - \log D^2(y'_{s^-|\pi})]
+    J_2(G^2, D^2) = \mathbb{E}_{y'_{a^+|\pi} \sim P_{G^2}(Y'_{a^+|\pi})}[\log D^2(y'_{a^+|\pi})] + \mathbb{E}_{y'_{a^-|\pi} \sim P_{G^2}(Y'_{a^-|\pi})}[1 - \log D^2(y'_{a^-|\pi})]
     \label{eq:CFGAN_se}
 \end{equation}
 
@@ -302,21 +302,21 @@ To achieve no indirect discrimination, the loss changes as follows:
 \begin{figure}
     \centering
     \includegraphics[width=0.70\linewidth]{img/CFGAN.png}
-    \caption{An example of the generator $G^2$ for CFGAN based on indirect discrimination. $S$ is set to $1$ or $0$ and the transmission is set only along $\pi$ = $\{S \to B \to Y \}$ to sample from the interventional distributions $P_{G^2}(A_{s^+}|\pi, B_{s+}|\pi , Y_{s+}|\pi)$ (red) and $P_{G^2} (A_{s^-}|\pi , B_{s^-}|\pi , Y_{s^-}|\pi )$ (green) respectively. $S$ is set to be $0$ for the reference setting.}
+    \caption{An example of the generator $G^2$ for CFGAN based on indirect discrimination. $S$ (\textit{the sensible attribute that we call A}) is set to $1$ or $0$ and the transmission is set only along $\pi$ = $\{S \to B \to Y \}$ to sample from the interventional distributions $P_{G^2}(A_{s^+}|\pi, B_{s+}|\pi , Y_{s+}|\pi)$ (red) and $P_{G^2} (A_{s^-}|\pi , B_{s^-}|\pi , Y_{s^-}|\pi )$ (green) respectively. $S$ is set to be $0$ for the reference setting.}
     \label{fig:CFGAN_pi_effect}
 \end{figure}
 
 \paragraph{CFGAN for Counterfactual Fairness}
 In counterfactual fairness (Definition~\ref{def:ce}), the intervention is performed conditioning on a subset of variables $\bm{O}  = \bm{o}$.   
 What changes concerning the previous cases are the conditioning. 
-Previously, we conditioned only on $S$ (Total Effect and Indirect Discrimination); now we condition also on the subset features $\bm{O}$ (e.g., $\bm{O} = \{race, native\_country\}$).
+Previously, we conditioned only on $A$ (Total Effect and Indirect Discrimination); now we condition also on the subset features $\bm{O}$ (e.g., $\bm{O} = \{race, native\_country\}$).
 Specifically, first we generate samples with $G^1$ (the generator that tends to approximate the true distribution, as $J_1$ in Equation~\ref{eq:CFGAN_te}), then we take noise vectors $\bm{z}$ that generate samples in which $\bm{O}= \bm{o}$ (i.e., samples in which certain features have specific values). 
-Finally, we utilise $G^2$, with the noise vector $\bm{z}$, to generate samples from the interventional distribution on $S$ and $\bm{O}$ denoted by $P_{G^2}(\bm{X}'_s,Y'_s|\bm{o})$. 
-The discriminator $D^2$ is revised to distinguish from $y'_{s^+|o} \sim P(Y'_{s+|o})$ and $y'_{s^-|o} \sim P(Y'_{s-|o})$.
+Finally, we utilise $G^2$, with the noise vector $\bm{z}$, to generate samples from the interventional distribution on $A$ and $\bm{O}$ denoted by $P_{G^2}(\bm{X}'_a,Y'_a|\bm{o})$. 
+The discriminator $D^2$ is revised to distinguish from $y'_{a^+|o} \sim P(Y'_{a+|o})$ and $y'_{a^-|o} \sim P(Y'_{a-|o})$.
 Hence, $J_2$ loss function becomes:
 
 \begin{equation}
-    J_2(G^2, D^2) = \mathbb{E}_{y'_{s^+|\bm{o}} \sim P_{G^2}(Y'_{s^+|\bm{o}})}[\log D^2(y'_{s^+|\bm{o}})] + \mathbb{E}_{y'_{s^-|\bm{o}} \sim P_{G^2}(Y'_{s^-|\bm{o}})}[1 - \log D^2(y'_{s^-|\bm{o}})]
+    J_2(G^2, D^2) = \mathbb{E}_{y'_{a^+|\bm{o}} \sim P_{G^2}(Y'_{a^+|\bm{o}})}[\log D^2(y'_{a^+|\bm{o}})] + \mathbb{E}_{y'_{a^-|\bm{o}} \sim P_{G^2}(Y'_{a^-|\bm{o}})}[1 - \log D^2(y'_{a^-|\bm{o}})]
     \label{eq:CFGAN_ce}
 \end{equation}
 
@@ -404,7 +404,7 @@ The counterfactual loss ensures that the $Y'$s generated by $G^1$ are as close a
 \begin{equation}
     \begin{split}
         J_1 &= \mathbb{E}_{(x,a,y) \sim P(\bm{X},A,Y)} \log [D(x,a,y)] + \mathbb{E}_{u \sim P(U),a \sim P(A))}[\log (1- D(G(u,a)))] \\
-        J_2 &= -\mathbb{E}_{u \sim P(U),a \sim P(A)}[\log (1-D(G(u,a))) - \lambda (G_Y(u,a) - G_Y(u,\neg a))^2]
+        J_2 &= \lambda \mathbb{E}_{u \sim P(U),a \sim P(A)}[ (G_Y(u,a) - G_Y(u,\neg a))^2]
     \end{split}
     \label{eq:cfsdg_loss}
 \end{equation}
@@ -424,7 +424,7 @@ The parameter $\lambda$ balances the satisfaction of the fairness notion.
 Table \ref{tab:comparison} shows the main difference among the generative models.
 FairGAN (Section~\ref{sec:fairgan}) aims to create generative models that produce datasets satisfying Demographic Parity (Definition~\ref{def:dp}). 
 They discussed that a naive solution, in which the model is trained only with $\bm{X}$ and $Y$; and $A$ is randomly sampled, is not a good solution, since $\bm{X}$ and $Y$ may inherit discrimination and thus, $A$ may be predictable given the other features. 
-However, subsequent work (Sections~\ref{sec:CFGAN},~\ref{sec:DECAF},~\ref{sec:CFSDG}) criticised FairGAN since the architecture is limited to satisfy only the DP notion in the ynthetic dataset, and they argue how the causal reasoning can be integrated in the training process to provide stronger fairness guarantees. 
+However, subsequent work (Sections~\ref{sec:CFGAN},~\ref{sec:DECAF},~\ref{sec:CFSDG}) criticised FairGAN since the architecture is limited to satisfy only the DP notion in the synthetic dataset, and they argue how the causal reasoning can be integrated in the training process to provide stronger fairness guarantees. 
 Nevertheless, methods such as CFGAN (Section~\ref{sec:CFGAN}) and DECAF (Section~\ref{sec:DECAF}) require having causal knowledge about data sources.
 
 With CFGAN, the idea was born to introduce the \emph{do-operator} to minimise the difference in distribution among the protected values using interventions and counterfactuals (see Section~\ref{sec:scm}). 
@@ -437,7 +437,7 @@ However, in the article, there is no guarantee that $P'$ and $P$ are even remote
 
 For example, consider a dataset where we have $A \to X \to Y$.
 Assume that $A := Ber(0.5)$, $X := m \times \mathds{1}\{a=0\}$ and $Y := \mathcal{N}(X, 1)$.
-Now, for satisfying DP (Definition~\ref{cor:dp_debias}), we need to remove both edges from $A$ to $X$ and then from $X$ to $Y$, then $Y$ will be either constant or a distribution independent from $X$ and so $m$.
+Now, for satisfying DP (Definition~\ref{cor:dp_debias}), we need to remove the edge from $X$ to $Y$, then $Y$ will be either constant or a distribution independent from $X$ and so $m$.
 Increasing $m$, we can have a large KL-distance between $P$ and $P'$.
 
 The last paper, CFSDG (Section~\ref{sec:CFSDG}), proposes to achieve fairness to counterfactual loss.
