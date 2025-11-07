@@ -227,16 +227,16 @@ The principal limitation of FairGAN will be discussed in Section~\ref{sec:discus
 
 \subsection{Causal fairness-aware GAN}
 \label{sec:CFGAN}
-Causal fairness-aware GAN (CFGAN)~\cite{DBLP:CFGAN} represents GAN--based SDG, which ensures fairness in the synthetic dataset by using the fairness notion (see Section~\ref{sec:sdg_def}) integrated in the loss functions.
-The architecture is similar to FairGAN (Section~\ref{sec:fairgan}), but also exploits causal reasoning (Section~\ref{sec:scm}). 
-In detail, CFGAN relies on the CausalGAN (Section~\ref{sec:causal_gan}) but extends the architecture by including an additional generator and discriminator.
-Hence, the model consists of two generators, $G^1$ and $G^2$, and two discriminators, $D^1$ and $D^2$. 
+Causal fairness-aware GAN (CFGAN)~\cite{DBLP:CFGAN} represents GAN--based SDG, which ensures fairness in the synthetic dataset by using the notion of fairness (see Section~\ref{sec:sdg_def}) integrated in the loss functions as in FairgAN.
+However, in this architecture, causal reasoning is also exploited (Section~\ref{sec:scm}). 
+In detail, the model consists of two generators, $G^1$ and $G^2$, and two discriminators, $D^1$ and $D^2$. 
 One discriminator is used to optimise the data utility, and another to enforce the fairness constraint.
-Concerning the generators, they are composed of a set of sub-generators, in formula, $G^i = \{G_0^i,\dots, G_d^i\}$ for $i = \{1,2\}$.
-In addition, the framework assumes a dataset $\mathcal{D}$ and a causal graph $\mathcal{G}$ that faithfully respects the dataset.
+The generators, instead, follow the implementation of CausalGAN (Section~\ref{sec:causal_gan}), which is composed of a set of sub-generators, in formula, $G^i = \{G_0^i,\dots, G_d^i\}$ for $i = \{1,2\}$.
+One of the most important aspects is that the architecture assumes a dataset $\mathcal{D}$ and a causal graph $\mathcal{G}$ that faithfully respects the dataset.
+
 The key concept behind the proposed model is to minimise the ``change in distribution'' caused by an intervention or counterfactual in the causal structure. 
 Intuitively, if an intervention on the protected attribute does not change the data distribution, we achieve fairness in the data generation process. 
-To introduce the algorithm, we need to describe some useful notions of fairness: total effect, path-specific effect, and counterfactual effect.
+To introduce the algorithm, we need to describe some criteria of fairness: total effect, path-specific effect, and counterfactual effect.
 
 The \textit{total effect} measures the causal effect of $\bm{X}$ on $Y$ where the intervention is transferred along all causal paths (i.e., directed paths) from $\bm{X}$ to $Y$.
 For the rest of this paper, we refer $P(Y | \mathrm{do}(\bm{X = x}))$ as $P(Y_{\bm{x}})$.
@@ -327,8 +327,9 @@ Hence, $J_2$ loss function becomes:
 
 \subsection{DECAF}
 \label{sec:DECAF}
-DEbiasing CAusal Fairness (DECAF)~\cite{DBLP:DECAF} denotes a generic approach that assumes a given causal graph $\mathcal{G}$ and learns the structural equations through conditional GANs as done for CausalGAN (Section~\ref{sec:causal_gan}).
-Before generating the data, we intervene in the derived SCM by removing dependencies that lead to unfairness in a downstream model (these can be specific to the fairness metric considered). 
+DEbiasing CAusal Fairness (DECAF)~\cite{DBLP:DECAF} denotes an approach for synthetic dataset generation that assumes a dataset $\mathcal{D}$ and a given causal graph $\mathcal{G}$.
+DECAF is a causal generative model based on structural equation models that implements these mechanisms through conditional GANs as done for CausalGAN (Section~\ref{sec:causal_gan}).
+The key difference with other approaches in the trained model is the capacity to intervene in the derived SCM before generating the data, thereby removing dependencies that lead to unfairness in a downstream model (these can be specific to the fairness metric considered). 
 Then we sample data by applying the (GAN–-based) structural equations that remain after these dependencies are removed. 
 To understand the logic behind DECAF, we have to introduce some definitions.
 
@@ -394,12 +395,14 @@ For example, suppose we only want to remove $(i \to j)$:  $X_i$ is generated nor
 \subsection{CFSDG}
 \label{sec:CFSDG}
 Counterfactual Fairness in Synthetic Data Generation (CFSDG)~\cite{counterfactual} represents the most recent paper analysed.
-As in previous works, assume a causal graph $\mathcal{G}$ and a dataset $\mathcal{D}$ that comprise $\bm{X}$, $A$, $Y$ the unobservable variable $U$, as in Figure~\ref{fig:CFSDG}.
+The architecture, distinct from CFCGAN and DECAF, consists of two generators, each implemented as a vanilla GAN, and two discriminators. 
+CFSDG does not require a causal graph $\mathcal{G}$.
+However, the model requires a dataset $\mathcal{D}$ that comprises $\bm{X}$ (unprotected features), $A$ (a binary protected feature), $Y$ (the target), and finally, to define a random variable $U$ as noise. 
+Figure~\ref{fig:CFSDG} depicts the CFSDG architecture.
 The intuition behind the architecture is to force the model to produce the same samples for all individuals in $A$ through counterfactual reasoning (see Definition~\ref{def:cof}).   
 To achieve this, the authors revisited the classical GAN architecture (Section~\ref{sec:gan}) as follows. 
 
 The model consists of two generators, $G^1$ and $G^2$, and one discriminator $D$. 
-Unlike previous works, generators are classical neural networks.  
 The $G^1$ and $G^2$ share the same weight and take the same noise input vector $\bm{z}$ (the authors refer to the noise vector $\bm{z}$ as the unobservable variable $U$ from the causal reasoning point of view). 
 The generator $G^1$ takes as input the sensitive attribute $a$ drawn from the marginal distribution, i.e., $a \sim P(A)$; on the other hand, the generator $G^2$ takes $\neg a$.
 The discriminator $D$ aims to distinguish between the real and fake, as designated for $D^1$ in CFGAN (Section~\ref{sec:CFGAN}). 
@@ -438,10 +441,9 @@ CFGAN (Section~\ref{sec:CFGAN}) w.r.t FairGAN introduced the notion of causal fa
 Nevertheless, methods such as CFGAN and DECAF (Section~\ref{sec:DECAF}), which empirically demonstrate that they outperform FairGAN, require a strong assumption: the availability of a causal graph that is faithful w.r.t. the data distribution in which the trained dataset was derived. 
 
 With CFGAN, the idea was born to introduce the \emph{do-operator} to minimise the difference in distribution among the protected values using interventions and counterfactuals (see Section~\ref{sec:scm}). 
-.
 
 Although good results were achieved by CFGAN, DECAF pointed out a relevant limitation: the lack of treatment for multiple protected attributes. 
-The DECAF's goal is not limited to achieving statistical constraints in the data, but also claims that the predictors trained on such data are fair as well.
+The DECAF's goal is not limited to achieving statistical constraints in the data, but also claims that the predictors trained on such data are fair in real datasets as well.
 Even if its goal is slightly different from the previous ones, it proposes an architecture that not only allows multiple protected attributes but also manages different notions of fairness and ``guarantees'' fair predictors.
 However, in the article, there is no guarantee that $P'$ and $P$ are even remotely close. 
 
